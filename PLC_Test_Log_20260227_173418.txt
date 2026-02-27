@@ -1,0 +1,9 @@
+[2026-02-27 17:34:18] === PLC DIAGNOSTICS STARTED ===
+[2026-02-27 17:34:25] SYSTEM: Successfully connected -> COM10 (115200 bps)
+[2026-02-27 17:34:44] SYSTEM: Disconnected.
+[2026-02-27 17:34:45] SYSTEM: Successfully connected -> COM10 (115200 bps)
+[2026-02-27 17:34:57] [ASK]  > [ENQ]00rss0106%MW100[EOT]E2
+[2026-02-27 17:34:59] [RES]  < ERROR: No response from PLC (Timeout)
+[2026-02-27 17:35:12] [ASK]  > [ENQ]00rss0106%mw100[EOT]22
+[2026-02-27 17:35:14] [RES]  < ERROR: No response from PLC (Timeout)
+[2026-02-27 17:35:43] SYSTEM: Disconnected.
