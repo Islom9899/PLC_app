@@ -3,6 +3,7 @@ import serial
 import threading
 import time
 import datetime
+import re
 
 # --- UI SOZLAMALARI ---
 ctk.set_appearance_mode("Dark")
@@ -60,9 +61,6 @@ class PLCTesterApp(ctk.CTk):
         self.title(LANG[self.current_lang]["title"])
         self.geometry("850x650")
         self.serial_port = None
-        
-        self.log_filename = f"PLC_Test_Log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        self.write_log_to_file("=== PLC DIAGNOSTICS STARTED ===")
 
         self.setup_ui()
         self.update_texts()
@@ -174,7 +172,7 @@ class PLCTesterApp(ctk.CTk):
 
     def build_xgt_frame(self, cmd, address, data_hex=""):
         """
-        cmd: "RSS", "rss", "WSS" yoki "wss"
+        cmd: "rss" yoki "wss" (kichik harf BCC qo'shadi, katta harf qo'shmaydi)
         address: masalan "%MW100"
         data_hex: (faqat yozishda) juft sonli hex raqamlar, masalan "00FF"
         """
@@ -243,7 +241,7 @@ class PLCTesterApp(ctk.CTk):
     def send_to_plc(self, frame, cmd, address, value=""):
         """
         frame: yuboriladigan to'liq ramka
-        cmd: buyruq turi (masalan "RSS" yoki "WSS")
+        cmd: buyruq turi (masalan "rss" yoki "wss")
         address: so'ralgan adres
         value: yozilgan qiymat (agar yozish bo'lsa)
         """
@@ -278,7 +276,6 @@ class PLCTesterApp(ctk.CTk):
                 if cmd.upper() == "RSS":
                     # O'qish: javobdagi qiymatni ajratib olish (odatda "0102XXXX" shaklida)
                     # Masalan: "00RSS01020001[ETX]" dan "0001" ni olish
-                    import re
                     match = re.search(r'[0-9A-F]{4}$', clean_res.replace('[ETX]', ''))
                     value_read = match.group(0) if match else "???"
                     self.log_message(f"[RES]  < {address} = {value_read} -> SUCCESS ✅", "green")
@@ -299,8 +296,9 @@ class PLCTesterApp(ctk.CTk):
     def read_data(self):
         addr = self.entry_read_addr.get().strip()
         if addr:
-            frame = self.build_xgt_frame("RSS", addr)   # katta harf bilan, BCC qo'shilmaydi
-            threading.Thread(target=self.send_to_plc, args=(frame, "RSS", addr)).start()
+            # Kichik harf bilan "rss" ishlatamiz, BCC qo'shiladi
+            frame = self.build_xgt_frame("rss", addr)
+            threading.Thread(target=self.send_to_plc, args=(frame, "rss", addr)).start()
 
     def write_data(self):
         addr = self.entry_write_addr.get().strip()
@@ -309,18 +307,14 @@ class PLCTesterApp(ctk.CTk):
             # Ma'lumot uzunligi juft bo'lishi kerak
             if len(val) % 2 != 0:
                 val = '0' + val  # oldiga nol qo'shish
-            frame = self.build_xgt_frame("WSS", addr, val)   # katta harf bilan
-            threading.Thread(target=self.send_to_plc, args=(frame, "WSS", addr, val)).start()
-
-    def write_log_to_file(self, text):
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(self.log_filename, "a", encoding="utf-8") as f:
-            f.write(f"[{timestamp}] {text}\n")
+            # Kichik harf bilan "wss" ishlatamiz, BCC qo'shiladi
+            frame = self.build_xgt_frame("wss", addr, val)
+            threading.Thread(target=self.send_to_plc, args=(frame, "wss", addr, val)).start()
 
     def log_message(self, message, color="white"):
+        """Faqat terminalga chiqarish, faylga saqlamaydi"""
         self.textbox_log.insert("end", message + "\n")
         self.textbox_log.see("end")
-        self.write_log_to_file(message)
 
 if __name__ == "__main__":
     app = PLCTesterApp()
