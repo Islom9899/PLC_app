@@ -1,6 +1,0 @@
-[2026-03-03 09:53:44] === PLC DIAGNOSTICS STARTED ===
-[2026-03-03 09:53:47] SYSTEM: Successfully connected -> COM10 (115200 bps)
-[2026-03-03 09:53:59] [ASK]  > [ENQ]00wss0106%mw1001234[EOT]F1
-[2026-03-03 09:53:59] [RES]  < %mw100 <- 1234 -> WRITE SUCCESS ✅
-[2026-03-03 09:54:17] [ASK]  > [ENQ]00rss0106%mw100[EOT]22
-[2026-03-03 09:54:19] [RES]  < %mw100 -> [RES]  < ERROR: No response from PLC (Timeout)
