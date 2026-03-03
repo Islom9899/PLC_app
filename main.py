@@ -174,7 +174,7 @@ class PLCTesterApp(ctk.CTk):
 
     def build_xgt_frame(self, cmd, address, data_hex=""):
         """
-        cmd: "rss" yoki "wss"
+        cmd: "RSS", "rss", "WSS" yoki "wss"
         address: masalan "%MW100"
         data_hex: (faqat yozishda) juft sonli hex raqamlar, masalan "00FF"
         """
@@ -197,31 +197,31 @@ class PLCTesterApp(ctk.CTk):
         ENQ = b'\x05'
         EOT = b'\x04'
 
-        # Ramkaning asosiy qismi (ENQ dan tashqari, lekin BCC hisoblash uchun ENQ ni qo'shamiz)
-        # Avval baytlar ro'yxatini tuzamiz
-        # ENQ + station_str + cmd + block_count + var_len + address + (agar yozish bo'lsa data_hex) + EOT
+        # Ramkaning asosiy qismi (ENQ dan EOT gacha)
         frame_parts = [
             ENQ,
             station_str.encode('ascii'),
-            cmd.encode('ascii'),      # kichik harf "rss" yoki "wss"
+            cmd.encode('ascii'),      # buyruq (katta/ kichikligi saqlanadi)
             block_count.encode('ascii'),
             var_len.encode('ascii'),
             address.encode('ascii')
         ]
-        if cmd == "WSS" and data_hex:
-            # Ma'lumotni ASCII hex sifatida qo'shamiz
+        # Yozish buyrug'i bo'lsa, ma'lumot qo'shamiz
+        if cmd.upper() == "WSS" and data_hex:
             frame_parts.append(data_hex.encode('ascii'))
         frame_parts.append(EOT)
 
         # Barcha qismlarni birlashtiramiz
         frame = b''.join(frame_parts)
 
-        # BCC hisoblash (ENQ dan EOT gacha bo'lgan barcha baytlar)
-        bcc_value = self.calculate_bcc(frame)   # frame ichida ENQ va EOT bor
-        bcc_bytes = bcc_value.encode('ascii')   # 2 bayt
+        # BCC faqat kichik harf bilan boshlangan buyruqlar uchun qo'shiladi
+        if cmd[0].islower():   # birinchi harf kichik (masalan 'r' yoki 'w')
+            bcc_value = self.calculate_bcc(frame)
+            bcc_bytes = bcc_value.encode('ascii')
+            full_frame = frame + bcc_bytes
+        else:
+            full_frame = frame   # katta harf – BCC qo'shilmaydi
 
-        # To'liq ramka = asosiy qism + BCC
-        full_frame = frame + bcc_bytes
         return full_frame
 
     def toggle_connection(self):
@@ -240,7 +240,13 @@ class PLCTesterApp(ctk.CTk):
             except Exception as e:
                 self.log_message(f"{lang['err_cable']} {e}", "red")
 
-    def send_to_plc(self, frame):
+    def send_to_plc(self, frame, cmd, address, value=""):
+        """
+        frame: yuboriladigan to'liq ramka
+        cmd: buyruq turi (masalan "RSS" yoki "WSS")
+        address: so'ralgan adres
+        value: yozilgan qiymat (agar yozish bo'lsa)
+        """
         lang = LANG[self.current_lang]
         if not self.serial_port or not self.serial_port.is_open:
             return
@@ -260,7 +266,7 @@ class PLCTesterApp(ctk.CTk):
                 bcc_bytes = self.serial_port.read(2)
                 response += bcc_bytes
             elif not response:
-                self.log_message(lang["err_timeout"], "red")
+                self.log_message(f"[RES]  < {address} -> " + lang["err_timeout"], "red")
                 return
 
             # Javobni matnga aylantirish
@@ -268,9 +274,21 @@ class PLCTesterApp(ctk.CTk):
             clean_res = resp_str.replace('\x06', '[ACK]').replace('\x15', '[NAK]').replace('\x05', '[ENQ]').replace('\x04', '[EOT]').replace('\x03', '[ETX]')
             
             if '\x06' in resp_str:
-                self.log_message(f"[RES]  < {clean_res} -> SUCCESS ✅", "green")
+                # ACK – muvaffaqiyatli
+                if cmd.upper() == "RSS":
+                    # O'qish: javobdagi qiymatni ajratib olish (odatda "0102XXXX" shaklida)
+                    # Masalan: "00RSS01020001[ETX]" dan "0001" ni olish
+                    import re
+                    match = re.search(r'[0-9A-F]{4}$', clean_res.replace('[ETX]', ''))
+                    value_read = match.group(0) if match else "???"
+                    self.log_message(f"[RES]  < {address} = {value_read} -> SUCCESS ✅", "green")
+                elif cmd.upper() == "WSS":
+                    self.log_message(f"[RES]  < {address} <- {value} -> WRITE SUCCESS ✅", "green")
+                else:
+                    self.log_message(f"[RES]  < {clean_res} -> SUCCESS ✅", "green")
             elif '\x15' in resp_str:
-                self.log_message(f"[RES]  < {clean_res} -> ERROR (NAK) ❌", "red")
+                # NAK – xatolik
+                self.log_message(f"[RES]  < {address} -> ERROR (NAK) ❌", "red")
             else:
                 self.log_message(f"[RES]  < {clean_res}", "white")
 
@@ -281,8 +299,8 @@ class PLCTesterApp(ctk.CTk):
     def read_data(self):
         addr = self.entry_read_addr.get().strip()
         if addr:
-            frame = self.build_xgt_frame("RSS", addr)
-            threading.Thread(target=self.send_to_plc, args=(frame,)).start()
+            frame = self.build_xgt_frame("RSS", addr)   # katta harf bilan, BCC qo'shilmaydi
+            threading.Thread(target=self.send_to_plc, args=(frame, "RSS", addr)).start()
 
     def write_data(self):
         addr = self.entry_write_addr.get().strip()
@@ -291,8 +309,8 @@ class PLCTesterApp(ctk.CTk):
             # Ma'lumot uzunligi juft bo'lishi kerak
             if len(val) % 2 != 0:
                 val = '0' + val  # oldiga nol qo'shish
-            frame = self.build_xgt_frame("WSS", addr, val)
-            threading.Thread(target=self.send_to_plc, args=(frame,)).start()
+            frame = self.build_xgt_frame("WSS", addr, val)   # katta harf bilan
+            threading.Thread(target=self.send_to_plc, args=(frame, "WSS", addr, val)).start()
 
     def write_log_to_file(self, text):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
