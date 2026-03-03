@@ -3,7 +3,6 @@ import serial
 import serial.tools.list_ports
 import threading
 import time
-import datetime
 import re
 import json
 import os
@@ -15,9 +14,6 @@ APP_NAME = "LS XGT PLC - Universal Diagnostic Tool"
 
 # --- KONFIGURATSIYA FAYLI ---
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".plc_diagnostic_config.json")
-
-# --- LOG PAPKASI ---
-LOG_DIR = os.path.join(os.path.expanduser("~"), "PLC_Diagnostic_Logs")
 
 # --- UI SOZLAMALARI ---
 ctk.set_appearance_mode("Dark")
@@ -270,22 +266,11 @@ class PLCTesterApp(ctk.CTk):
         self._monitoring = False
         self._monitor_thread = None
 
-        # --- Log fayl uchun lock ---
-        self._log_lock = threading.Lock()
-
         # --- Ulanish holati uchun lock ---
         self._connection_lock = threading.Lock()
 
         self.current_lang = "EN"
         self.serial_port = None
-
-        # --- Log papkasini yaratish ---
-        os.makedirs(LOG_DIR, exist_ok=True)
-        self.log_filename = os.path.join(
-            LOG_DIR,
-            f"PLC_Log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        )
-        self.write_log_to_file("=== PLC DIAGNOSTICS STARTED ===")
 
         # --- Konfiguratsiyani yuklash ---
         self.config = load_config()
@@ -304,9 +289,6 @@ class PLCTesterApp(ctk.CTk):
 
         # --- UI queueni tekshirish ---
         self._process_ui_queue()
-
-        # --- Eski loglarni tozalash (30 kundan eski) ---
-        self._cleanup_old_logs(max_age_days=30)
 
     def _apply_saved_config(self):
         """Saqlangan konfiguratsiyani UI ga qo'llash."""
@@ -342,7 +324,6 @@ class PLCTesterApp(ctk.CTk):
                 self.serial_port.close()
             except Exception:
                 pass
-        self.write_log_to_file("=== PLC DIAGNOSTICS CLOSED ===")
         self.destroy()
 
     def _process_ui_queue(self):
@@ -358,19 +339,6 @@ class PLCTesterApp(ctk.CTk):
     def _run_on_ui(self, func, *args, **kwargs):
         """Thread-safe: funksiyani main threadga yuborish."""
         self._ui_queue.put((func, args, kwargs))
-
-    def _cleanup_old_logs(self, max_age_days=30):
-        """Eski log fayllarni o'chirish."""
-        try:
-            now = time.time()
-            for filename in os.listdir(LOG_DIR):
-                filepath = os.path.join(LOG_DIR, filename)
-                if os.path.isfile(filepath) and filename.startswith("PLC_Log_"):
-                    age_days = (now - os.path.getmtime(filepath)) / 86400
-                    if age_days > max_age_days:
-                        os.remove(filepath)
-        except OSError:
-            pass
 
     def setup_ui(self):
         # === TOP BAR: TIL VA HAQIDA ===
@@ -973,23 +941,12 @@ class PLCTesterApp(ctk.CTk):
             self.send_to_plc(frame, "RSS", address)
             time.sleep(interval_ms / 1000.0)
 
-    def write_log_to_file(self, text):
-        """Thread-safe log yozish."""
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        with self._log_lock:
-            try:
-                with open(self.log_filename, "a", encoding="utf-8") as f:
-                    f.write(f"[{timestamp}] {text}\n")
-            except IOError:
-                pass
-
     def log_message(self, message, color="white"):
         """Terminalga rangli xabar yozish (faqat main threaddan chaqirish!)."""
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        timestamp = time.strftime("%H:%M:%S")
         full_msg = f"[{timestamp}] {message}\n"
         self.textbox_log._textbox.insert("end", full_msg, color)
         self.textbox_log.see("end")
-        self.write_log_to_file(message)
 
 
 if __name__ == "__main__":
