@@ -57,7 +57,8 @@ class PLCTesterApp(ctk.CTk):
         super().__init__()
         self.current_lang = "EN"
         self.title(LANG[self.current_lang]["title"])
-        self.geometry("900x700")
+        self.attributes("-fullscreen", True)
+        self.bind("<Escape>", lambda e: self.destroy())
         self.serial_port = None
         self.setup_ui()
         self.update_texts()
